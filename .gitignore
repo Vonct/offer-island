@@ -10,3 +10,6 @@ dist/
 *.sqlite*
 private/
 backups/
+
+.build/
+*.log
