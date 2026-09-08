@@ -4,6 +4,7 @@ import WebKit
 class IslandPanel: NSPanel { override var canBecomeKey: Bool { true } }
 class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
  var process: Process?; var panel: IslandPanel!; var status: NSStatusItem!; var timer: Timer?; var attempts=0
+ var checkingUpdate=false
  let port=18783
  var base:String { "http://127.0.0.1:\(port)" }
  func applicationDidFinishLaunching(_ notification: Notification) {
@@ -14,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   process!.standardOutput=FileHandle.nullDevice;process!.standardError=FileHandle.nullDevice
   do {try process!.run()} catch {showError("无法启动本地数据服务：\(error)");return}
   status=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength);status.button?.title="✳"
-  let menu=NSMenu();menu.addItem(withTitle:"打开网页版",action:#selector(showMain),keyEquivalent:"o").target=self;menu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;menu.addItem(withTitle:"小岛回到屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;menu.addItem(.separator());menu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self;status.menu=menu
+  let menu=NSMenu();menu.addItem(withTitle:"打开网页版",action:#selector(showMain),keyEquivalent:"o").target=self;menu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;menu.addItem(withTitle:"小岛回到屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;menu.addItem(withTitle:"检查更新…",action:#selector(checkUpdates),keyEquivalent:"").target=self;menu.addItem(.separator());menu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self;status.menu=menu
   timer=Timer.scheduledTimer(withTimeInterval:0.3,repeats:true){[weak self] _ in self?.waitForServer()}
  }
  func waitForServer(){attempts+=1;if attempts>60{timer?.invalidate();showError("本地服务未能启动。请检查端口 18783 是否被占用。");return};var request=URLRequest(url:URL(string:base+"/api/state")!);request.setValue("web",forHTTPHeaderField:"X-Offer-Client");URLSession.shared.dataTask(with:request){data,response,error in guard error==nil,let data=data,let json=try? JSONSerialization.jsonObject(with:data) as? [String:Any],json["app"] as? String == "offer-island" else{return};DispatchQueue.main.async{if self.panel != nil{return};self.timer?.invalidate();self.setupWindows()}}.resume()}
@@ -25,6 +26,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
  @objc func showMain(){NSWorkspace.shared.open(URL(string:base+"/")!)}
  @objc func toggleIsland(){guard panel != nil else{return};if panel.isVisible{panel.orderOut(nil)}else{panel.orderFrontRegardless()}}
  @objc func resetPosition(){guard panel != nil else{return};let screen=NSScreen.main ?? NSScreen.screens[0];let f=screen.visibleFrame;panel.setFrameOrigin(NSPoint(x:f.midX-panel.frame.width/2,y:f.maxY-panel.frame.height-5))}
+ @objc func checkUpdates(){
+  guard !checkingUpdate else{return};checkingUpdate=true
+  var request=URLRequest(url:URL(string:"https://api.github.com/repos/Vonct/offer-island/releases/latest")!);request.timeoutInterval=15;request.setValue("application/vnd.github+json",forHTTPHeaderField:"Accept")
+  URLSession.shared.dataTask(with:request){data,response,error in
+   DispatchQueue.main.async {
+    self.checkingUpdate=false
+    let alert=NSAlert();alert.messageText="检查更新"
+    let current=Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "0.3.0"
+    guard error==nil,let http=response as? HTTPURLResponse,http.statusCode==200,let data=data,let release=try? JSONSerialization.jsonObject(with:data) as? [String:Any],let tag=release["tag_name"] as? String else {alert.informativeText="暂时无法检查更新，请稍后重试。当前版本："+current;alert.runModal();return}
+    let version=tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+    guard version.range(of:"^[0-9]+\\.[0-9]+\\.[0-9]+$",options:.regularExpression) != nil else {alert.informativeText="发行版本格式无法识别，请查看 GitHub Releases。";alert.runModal();return}
+    if version.compare(current,options:.numeric) == .orderedDescending {
+     alert.messageText="发现新版本 "+tag;alert.informativeText="当前版本："+current+"。打开发布页查看说明并下载。安装前请退出应用，再替换 Applications 中的旧版本；本地数据保留。";alert.addButton(withTitle:"查看更新");alert.addButton(withTitle:"稍后")
+     if alert.runModal() == .alertFirstButtonReturn {NSWorkspace.shared.open(URL(string:"https://github.com/Vonct/offer-island/releases/latest")!)}
+    }else{alert.informativeText="当前版本 "+current+" 已是最新版本。";alert.runModal()}
+   }
+  }.resume()
+ }
  @objc func quit(){NSApp.terminate(nil)}
  func showError(_ message:String){let alert=NSAlert();alert.messageText="Offer Island";alert.informativeText=message;alert.runModal();NSApp.terminate(nil)}
  func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage){guard let url=message.frameInfo.request.url,url.host=="127.0.0.1",url.port==port,let body=message.body as? [String:Any],let action=body["action"] as? String else{return};switch action{case "backup":if let text=body["text"] as? String, text.utf8.count < 8000000 { let save=NSSavePanel();save.nameFieldStringValue="offer-island-backup.json";save.begin { response in if response == .OK, let url=save.url { do {try text.write(to:url,atomically:true,encoding:.utf8)} catch {self.showError("备份保存失败：\(error)")} } } };case "main":showMain();case "island":panel.orderFrontRegardless();case "hide":panel.orderOut(nil);case "resize":if let h=body["height"] as? Double{let f=panel.frame;panel.setFrame(NSRect(x:f.minX,y:f.maxY-CGFloat(min(400,max(112,h))),width:f.width,height:CGFloat(min(400,max(112,h)))),display:true,animate:true)};default:break}}
