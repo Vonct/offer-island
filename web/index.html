@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>求职小岛</title>
+  <style>
+    :root { --ink:#172235; --muted:#657085; --line:#e5e9f0; --card:#fff; --bg:#f5f7fb; --accent:#3467d6; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:1040px; background:var(--bg); color:var(--ink); font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:1440px; margin:0 auto; padding:52px 40px 72px; }
+    header { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px; }
+    h1 { margin:0; font-size:30px; letter-spacing:-.7px; } .sub { margin:7px 0 0; color:var(--muted); }
+    .summary { display:flex; gap:10px; } .count { min-width:92px; padding:9px 13px; background:#fff; border:1px solid var(--line); border-radius:10px; color:var(--muted); }
+    .count b { margin-right:5px; color:var(--ink); font-size:18px; }
+    .notice { display:flex; align-items:center; gap:10px; margin:0 0 18px; padding:12px 14px; color:#765400; background:#fff9e8; border:1px solid #f3df9b; border-radius:9px; }
+    .dot { width:8px; height:8px; flex:0 0 auto; background:#efaa00; border-radius:50%; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 8px 24px rgba(27,39,66,.05); }
+    table { width:100%; min-width:1190px; border-collapse:collapse; } th { padding:13px 16px; text-align:left; color:#5d6779; font-weight:600; font-size:12px; letter-spacing:.02em; background:#fafbfc; border-bottom:1px solid var(--line); }
+    td { padding:16px; vertical-align:top; border-bottom:1px solid var(--line); } tr:last-child td { border-bottom:0; } tr:hover td { background:#fcfdff; }
+    .company { font-weight:700; font-size:15px; } .role { max-width:200px; margin-top:3px; color:#4d586b; }
+    .date { color:#4d586b; white-space:nowrap; } .evidence { max-width:270px; color:#505a6b; } .action { max-width:210px; color:#3d4758; }
+    select, input { width:100%; min-height:35px; border:1px solid #d7dde7; border-radius:7px; padding:7px 9px; color:var(--ink); background:#fff; font:inherit; outline:none; }
+    select:focus, input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(52,103,214,.12); }
+    .tag { display:inline-flex; align-items:center; min-height:27px; padding:3px 9px; border-radius:999px; font-weight:600; white-space:nowrap; }
+    .assessment { background:#e9f1ff; color:#2756ae; } .submitted { background:#f0f2f6; color:#596579; }
+    .link-row { display:flex; gap:7px; min-width:235px; } .link-row input { min-width:0; }
+    button { min-height:35px; padding:7px 11px; border:1px solid #d7dde7; border-radius:7px; color:#344052; background:#fff; font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+    button:hover { background:#f4f7fd; border-color:#aac0ec; } button.open { color:#fff; background:var(--accent); border-color:var(--accent); } button.open:disabled { color:#9ba5b6; background:#f0f2f6; border-color:#e1e5eb; cursor:not-allowed; }
+    .footer { display:flex; align-items:center; justify-content:space-between; margin-top:15px; color:var(--muted); font-size:13px; } #saved { color:#258252; opacity:0; transition:opacity .2s; }
+    @media (max-width:760px) { body { min-width:0; } main { padding:28px 16px; } header { display:block; } .summary { margin-top:16px; } }
+  </style>
+  <link rel="stylesheet" href="assets/tracker-calendar.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>求职小岛</h1><p class="sub">本地优先的求职工作台 · 开源原型</p></div>
+      <div class="summary"><div class="count"><b id="total">0</b>职位</div><div class="count"><b id="active">0</b>进行中</div></div>
+    </header>
+    <section id="schedule" aria-label="求职日程"></section>
+    <div class="notice"><span class="dot"></span><span>当前为早期原型。<a href="?demo">查看虚构示例</a>；正式模式从空白数据开始。</span></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>公司 / 职位</th><th>关键日期</th><th>当前状态</th><th>证据与备注</th><th>下一步</th><th>职位链接（本机保存）</th></tr></thead>
+      <tbody id="rows"></tbody></table>
+    </div>
+    <div class="footer"><span>链接和状态仅保存在这台电脑的浏览器本地存储中；文件可离线使用。</span><span id="saved">已保存</span></div>
+  </main>
+  <script>
+    const demoMode = new URLSearchParams(location.search).has('demo');
+    const key = 'job-island-applications-v1';
+    const statuses = ['已投递','筛选中','测评中','面试','Offer','拒绝/已结束','待确认'];
+    const defaults = demoMode ? [
+      {id:'example-software',company:'示例科技',role:'软件工程师',date:'日期待确认',status:'筛选中',evidence:'虚构演示记录。',next:'准备项目介绍。',link:''}
+    ] : [];
+    let records = defaults;
+    if (!demoMode) {
+      try { const stored = JSON.parse(localStorage.getItem(key) || 'null'); if (Array.isArray(stored)) records = stored; }
+      catch { /* Keep the empty view when stored JSON is invalid. */ }
+    }
+    function persistApplications() { if (!demoMode) localStorage.setItem(key, JSON.stringify(records)); }
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function tagClass(s) { return s === '测评中' ? 'assessment' : 'submitted'; }
+    function render() {
+      document.querySelector('#rows').innerHTML = records.map(r => `<tr>
+        <td><div class="company">${esc(r.company)}</div><div class="role">${esc(r.role)}</div></td>
+        <td class="date">${esc(r.date).replace(/\n/g,'<br>')}</td>
+        <td><select aria-label="${esc(r.company)} ${esc(r.role)} 的状态" data-id="${r.id}" class="status">${statuses.map(s => `<option ${s===r.status?'selected':''}>${s}</option>`).join('')}</select><div class="tag ${tagClass(r.status)}">${esc(r.status)}</div></td>
+        <td class="evidence">${esc(r.evidence)}</td><td class="action">${esc(r.next)}</td>
+        <td><div class="link-row"><input aria-label="${esc(r.company)} ${esc(r.role)} 的链接" data-id="${r.id}" class="link" type="url" placeholder="粘贴职位或进度链接" value="${esc(r.link)}"><button class="open" data-id="${r.id}" ${r.link ? '' : 'disabled'}>打开</button></div></td>
+      </tr>`).join('');
+      if (!records.length) document.querySelector('#rows').innerHTML = '<tr><td colspan="6">还没有投递记录。手动录入与 Agent 导入正在规划中；可先使用日程，或查看上方虚构示例。</td></tr>';
+      document.querySelector('#total').textContent = records.length;
+      document.querySelector('#active').textContent = records.filter(r => ['筛选中','测评中','面试'].includes(r.status)).length;
+    }
+    function save() { persistApplications(); const el=document.querySelector('#saved'); el.style.opacity=1; clearTimeout(window.saveTimer); window.saveTimer=setTimeout(()=>el.style.opacity=0,1600); render(); }
+    document.addEventListener('change', e => { if (e.target.classList.contains('status')) { records.find(r=>r.id===e.target.dataset.id).status=e.target.value; save(); } });
+    document.addEventListener('input', e => { if (e.target.classList.contains('link')) { records.find(r=>r.id===e.target.dataset.id).link=e.target.value.trim(); persistApplications(); const button=e.target.nextElementSibling; button.disabled=!e.target.value.trim(); } });
+    document.addEventListener('click', e => { if (!e.target.classList.contains('open')) return; const link=records.find(r=>r.id===e.target.dataset.id).link; if (/^https?:\/\//i.test(link)) window.open(link, '_blank', 'noopener'); });
+    render();
+  </script>
+  <script src="assets/tracker-calendar.js"></script>
+</body>
+</html>
