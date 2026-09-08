@@ -1,5 +1,5 @@
 (() => {
-  const storageKey = 'job-island-calendar-v1';
+  const storageKey = 'offer-calendar-v1';
   const demo = new URLSearchParams(location.search).has('demo');
   const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const today = dateKey(new Date());
