@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#f5ead8"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#6c4b2f" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="660" height="400" fill="url(#paper)"/>
+  <circle cx="62" cy="65" r="76" fill="#f4c985" opacity="0.22"/>
+  <circle cx="608" cy="352" r="112" fill="#89bca2" opacity="0.13"/>
+
+  <text x="330" y="53" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"
+        font-size="24" font-weight="650" fill="#3f3026">Offer Island</text>
+  <text x="330" y="80" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"
+        font-size="13" fill="#806a58">拖入 Applications 完成安装 · Drag to install</text>
+
+  <g filter="url(#soft-shadow)" fill="none" stroke="#c98954" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M269 205 H390" stroke-width="10" opacity="0.22"/>
+    <path d="M270 199 H389" stroke-width="5"/>
+    <path d="M370 180 L391 199 L370 218" stroke-width="5"/>
+  </g>
+
+</svg>

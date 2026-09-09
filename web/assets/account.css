@@ -1,0 +1,10 @@
+.account-dialog{position:fixed;inset:8px;margin:auto;width:min(420px,calc(100% - 16px));max-height:calc(100% - 16px);overflow:auto;box-sizing:border-box;border:1px solid #77604a;border-radius:18px;padding:20px;background:#fdfbf9;color:#332a23;font:13px/1.5 -apple-system,'PingFang SC',sans-serif}.account-dialog::backdrop{background:#0007}.account-dialog h2{font-size:18px;margin:0 0 10px}.account-dialog label{display:block;margin:10px 0}.account-dialog input{display:block;width:100%;box-sizing:border-box;padding:8px;border:1px solid #c9b7a5;border-radius:6px;background:#fff;color:#332a23}.account-dialog button{font:inherit;cursor:pointer;border:1px solid #9e866c;border-radius:8px;background:transparent;color:inherit;padding:6px 9px}.account-actions{display:flex;gap:8px;flex-wrap:wrap}.account-message{color:#9b4128}.account-dialog [hidden]{display:none!important}
+
+.account-online{display:inline-flex;align-items:center;font:inherit;color:#72502e;text-decoration:none;border:1px solid #9e866c;border-radius:8px;padding:6px 9px}
+.account-dialog button,.account-online,#account-slot button{transition:background-color .16s ease,box-shadow .16s ease,border-color .16s ease,transform .1s ease}
+.account-dialog button:not(:disabled):hover,.account-online:hover,#account-slot button:hover{background:#dbaa7220;border-color:#c38d51;box-shadow:0 0 12px #dbaa7240}
+.account-dialog button:not(:disabled):active,.account-online:active,#account-slot button:active{transform:scale(.97)}
+.account-online:focus-visible,.account-dialog button:focus-visible{outline:2px solid #c38d51;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.account-dialog button,.account-online,#account-slot button{transition:none;transform:none!important}}
+
+.account-footer{display:flex;justify-content:flex-end;position:sticky;bottom:-20px;background:#fdfbf9;padding:12px 0 0;margin-top:16px}.account-dialog{padding-bottom:16px}

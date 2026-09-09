@@ -1,10 +1,14 @@
 import AppKit
 import WebKit
 
-class IslandPanel: NSPanel { override var canBecomeKey: Bool { true } }
+class IslandPanel: NSPanel {
+ override var canBecomeKey: Bool { true }
+ override func constrainFrameRect(_ frameRect:NSRect,to screen:NSScreen?)->NSRect { frameRect }
+}
 class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
- var process: Process?; var panel: IslandPanel!; var status: NSStatusItem!; var timer: Timer?; var attempts=0
- var checkingUpdate=false
+ var process: Process?; var panel: IslandPanel!; var status: NSStatusItem!; var statusMenu: NSMenu!; var islandView: WKWebView?; var timer: Timer?; var pointerTimer: Timer?; var pointerEnteredAt: Date?; var pointerLeftAt: Date?; var attempts=0; var isExpanded=false
+ var frameTimer: Timer?
+ var checkingUpdate=false; var accountModal=false
  let port=18783
  var base:String { "http://127.0.0.1:\(port)" }
  func applicationDidFinishLaunching(_ notification: Notification) {
@@ -14,18 +18,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   var env=ProcessInfo.processInfo.environment;env["OFFER_PORT"]="\(port)";env["OFFER_OCR"]=resources.appendingPathComponent("offer-ocr").path;process!.environment=env
   process!.standardOutput=FileHandle.nullDevice;process!.standardError=FileHandle.nullDevice
   do {try process!.run()} catch {showError("无法启动本地数据服务：\(error)");return}
-  status=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength);status.button?.title="✳"
-  let menu=NSMenu();menu.addItem(withTitle:"打开网页版",action:#selector(showMain),keyEquivalent:"o").target=self;menu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;menu.addItem(withTitle:"小岛回到屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;menu.addItem(withTitle:"检查更新…",action:#selector(checkUpdates),keyEquivalent:"").target=self;menu.addItem(.separator());menu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self;status.menu=menu
+  status=NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)
+  if let icon=NSImage(contentsOf:resources.appendingPathComponent("OfferIslandIcon.icns")){icon.size=NSSize(width:18,height:18);status.button?.image=icon;status.button?.imagePosition = .imageOnly}else{status.button?.title="✳"}
+  status.button?.toolTip="Offer Island：左键显示 / 隐藏，右键打开菜单";status.button?.target=self;status.button?.action=#selector(statusItemClicked(_:));status.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
+  statusMenu=NSMenu();statusMenu.addItem(withTitle:"打开在线工作台",action:#selector(showOnline),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"打开网页版",action:#selector(showMain),keyEquivalent:"o").target=self;statusMenu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;statusMenu.addItem(withTitle:"贴合刘海 / 屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"检查更新…",action:#selector(checkUpdates),keyEquivalent:"").target=self;statusMenu.addItem(.separator());statusMenu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self
+  NotificationCenter.default.addObserver(self,selector:#selector(screenConfigurationChanged(_:)),name:NSApplication.didChangeScreenParametersNotification,object:nil)
   timer=Timer.scheduledTimer(withTimeInterval:0.3,repeats:true){[weak self] _ in self?.waitForServer()}
  }
  func waitForServer(){attempts+=1;if attempts>60{timer?.invalidate();showError("本地服务未能启动。请检查端口 18783 是否被占用。");return};var request=URLRequest(url:URL(string:base+"/api/state")!);request.setValue("web",forHTTPHeaderField:"X-Offer-Client");URLSession.shared.dataTask(with:request){data,response,error in guard error==nil,let data=data,let json=try? JSONSerialization.jsonObject(with:data) as? [String:Any],json["app"] as? String == "offer-island" else{return};DispatchQueue.main.async{if self.panel != nil{return};self.timer?.invalidate();self.setupWindows()}}.resume()}
  func web(_ path:String)->WKWebView{let config=WKWebViewConfiguration();config.userContentController.add(self,name:"native");let view=WKWebView(frame:.zero,configuration:config);view.navigationDelegate=self;view.uiDelegate=self;view.setValue(false,forKey:"drawsBackground");view.load(URLRequest(url:URL(string:base+path)!));return view}
  func setupWindows(){
-  panel=IslandPanel(contentRect:NSRect(x:0,y:0,width:460,height:112),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false);panel.level = .floating;panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=false;panel.isMovableByWindowBackground=true;panel.hidesOnDeactivate=false;panel.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary];panel.contentView=web("/island.html");resetPosition();panel.orderFrontRegardless()
+  let screen=preferredScreen();let hasNotch=notchGeometry(on:screen) != nil;let initialHeight=collapsedHeight(on:screen);islandView=web("/island.html?notch=\(hasNotch ? "1" : "0")")
+  panel=IslandPanel(contentRect:NSRect(x:0,y:0,width:460,height:initialHeight),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false);panel.level=NSWindow.Level(rawValue:NSWindow.Level.statusBar.rawValue+1);panel.backgroundColor = .clear;panel.isOpaque=false;panel.hasShadow=false;panel.isMovableByWindowBackground = !hasNotch;panel.hidesOnDeactivate=false;panel.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary];panel.contentView=islandView;islandView?.wantsLayer=true;islandView?.layer?.cornerRadius=25;islandView?.layer?.maskedCorners=[.layerMinXMinYCorner,.layerMaxXMinYCorner];islandView?.layer?.masksToBounds=true;resetPosition();panel.orderFrontRegardless()
  }
+ @objc func showOnline(){NSWorkspace.shared.open(URL(string:"https://offer-island-milan.netlify.app/")!)}
  @objc func showMain(){NSWorkspace.shared.open(URL(string:base+"/")!)}
- @objc func toggleIsland(){guard panel != nil else{return};if panel.isVisible{panel.orderOut(nil)}else{panel.orderFrontRegardless()}}
- @objc func resetPosition(){guard panel != nil else{return};let screen=NSScreen.main ?? NSScreen.screens[0];let f=screen.visibleFrame;panel.setFrameOrigin(NSPoint(x:f.midX-panel.frame.width/2,y:f.maxY-panel.frame.height-5))}
+ @objc func statusItemClicked(_ sender:NSStatusBarButton){if NSApp.currentEvent?.type == .rightMouseUp{statusMenu.popUp(positioning:nil,at:NSPoint(x:sender.bounds.minX,y:sender.bounds.minY),in:sender)}else{toggleIsland()}}
+ @objc func toggleIsland(){guard panel != nil else{return};if panel.isVisible{panel.orderOut(nil)}else{layoutPanel(height:panel.frame.height,animate:false);panel.orderFrontRegardless()}}
+ func notchGeometry(on screen:NSScreen)->(width:CGFloat,height:CGFloat)?{guard let left=screen.auxiliaryTopLeftArea,let right=screen.auxiliaryTopRightArea else{return nil};let width=right.minX-left.maxX;let height=max(screen.safeAreaInsets.top,left.height,right.height);guard width>80,height>0 else{return nil};return(width,height)}
+ func preferredScreen()->NSScreen{NSScreen.screens.first(where:{notchGeometry(on:$0) != nil}) ?? NSScreen.main ?? NSScreen.screens[0]}
+ func collapsedHeight(on screen:NSScreen)->CGFloat{notchGeometry(on:screen).map{$0.height+18} ?? 72}
+ // Pass the physical safe area to the page; the expanded header starts below it.
+ func setNotchMode(_ enabled:Bool){
+  let inset=enabled ? (notchGeometry(on:preferredScreen())?.height ?? 0) : 0
+  islandView?.evaluateJavaScript("document.documentElement.classList.toggle('notch-mode', \(enabled ? "true" : "false"));document.documentElement.style.setProperty('--notch-height','\(inset)px');document.documentElement.style.setProperty('--collapsed-height','\(collapsedHeight(on:preferredScreen()))px')")
+ }
+ func layoutPanel(height:CGFloat,animate:Bool){
+  guard panel != nil else{return}
+  let screen=preferredScreen();let notch=notchGeometry(on:screen)
+  let width=isExpanded ? CGFloat(460) : notch.map{max(380,min(500,$0.width+260))} ?? 460
+  let top=notch == nil ? screen.visibleFrame.maxY-5 : screen.frame.maxY
+  let frame=NSRect(x:screen.frame.midX-width/2,y:top-height,width:width,height:height)
+  panel.isMovableByWindowBackground = notch == nil
+  setNotchMode(notch != nil)
+  // Animate from the current frame so rapid reversals never jump to an old endpoint.
+  frameTimer?.invalidate();frameTimer=nil
+  guard animate,!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else{panel.setFrame(frame,display:true);return}
+  let start=panel.frame;let began=ProcessInfo.processInfo.systemUptime
+  let duration=0.22
+  let animation=Timer(timeInterval:1.0/60,repeats:true){[weak self] timer in
+   guard let self=self else{timer.invalidate();return}
+   let t=min(1,(ProcessInfo.processInfo.systemUptime-began)/duration)
+   let eased=CGFloat(1-pow(1-t,3))
+   self.panel.setFrame(NSRect(x:start.minX+(frame.minX-start.minX)*eased,y:start.minY+(frame.minY-start.minY)*eased,width:start.width+(frame.width-start.width)*eased,height:start.height+(frame.height-start.height)*eased),display:true)
+   if t>=1{timer.invalidate();self.frameTimer=nil}
+  }
+  frameTimer=animation;RunLoop.main.add(animation,forMode:.common)
+ }
+ func startPointerTracking(){guard pointerTimer == nil else{return};pointerTimer=Timer(timeInterval:1.0/60,target:self,selector:#selector(trackPointer),userInfo:nil,repeats:true);RunLoop.main.add(pointerTimer!,forMode:.common)}
+ func requestExpanded(_ expanded:Bool){guard isExpanded != expanded else{return};isExpanded=expanded;pointerEnteredAt=nil;pointerLeftAt=nil;islandView?.evaluateJavaScript("window.offerIslandSetExpanded?.(\(expanded ? "true" : "false"))")}
+ @objc func trackPointer(){if accountModal{pointerEnteredAt=nil;pointerLeftAt=nil;return};guard panel != nil,panel.isVisible,notchGeometry(on:preferredScreen()) != nil else{pointerEnteredAt=nil;pointerLeftAt=nil;return};let inside=panel.frame.insetBy(dx:-4,dy:-4).contains(NSEvent.mouseLocation);let now=Date();if inside{pointerLeftAt=nil;if !isExpanded{if let entered=pointerEnteredAt{if now.timeIntervalSince(entered)>=0.08{requestExpanded(true)}}else{pointerEnteredAt=now}}else{pointerEnteredAt=nil}}else{pointerEnteredAt=nil;if isExpanded{if let left=pointerLeftAt{if now.timeIntervalSince(left)>=0.28{requestExpanded(false)}}else{pointerLeftAt=now}}else{pointerLeftAt=nil}}}
+ @objc func resetPosition(){guard panel != nil else{return};let screen=preferredScreen();layoutPanel(height:isExpanded ? panel.frame.height : collapsedHeight(on:screen),animate:true)}
+ @objc func screenConfigurationChanged(_ notification:Notification){guard panel != nil else{return};let screen=preferredScreen();layoutPanel(height:isExpanded ? panel.frame.height : collapsedHeight(on:screen),animate:false)}
  @objc func checkUpdates(){
   guard !checkingUpdate else{return};checkingUpdate=true
   var request=URLRequest(url:URL(string:"https://api.github.com/repos/Vonct/offer-island/releases/latest")!);request.timeoutInterval=15;request.setValue("application/vnd.github+json",forHTTPHeaderField:"Accept")
@@ -46,10 +90,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
  }
  @objc func quit(){NSApp.terminate(nil)}
  func showError(_ message:String){let alert=NSAlert();alert.messageText="Offer Island";alert.informativeText=message;alert.runModal();NSApp.terminate(nil)}
- func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage){guard let url=message.frameInfo.request.url,url.host=="127.0.0.1",url.port==port,let body=message.body as? [String:Any],let action=body["action"] as? String else{return};switch action{case "backup":if let text=body["text"] as? String, text.utf8.count < 8000000 { let save=NSSavePanel();save.nameFieldStringValue="offer-island-backup.json";save.begin { response in if response == .OK, let url=save.url { do {try text.write(to:url,atomically:true,encoding:.utf8)} catch {self.showError("备份保存失败：\(error)")} } } };case "main":showMain();case "island":panel.orderFrontRegardless();case "hide":panel.orderOut(nil);case "resize":if let h=body["height"] as? Double{let f=panel.frame;panel.setFrame(NSRect(x:f.minX,y:f.maxY-CGFloat(min(400,max(112,h))),width:f.width,height:CGFloat(min(400,max(112,h)))),display:true,animate:true)};default:break}}
+ func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage){guard let url=message.frameInfo.request.url,url.host=="127.0.0.1",url.port==port,let body=message.body as? [String:Any],let action=body["action"] as? String else{return};switch action{case "backup":if let text=body["text"] as? String, text.utf8.count < 8000000 { let save=NSSavePanel();save.nameFieldStringValue="offer-island-backup.json";save.begin { response in if response == .OK, let url=save.url { do {try text.write(to:url,atomically:true,encoding:.utf8)} catch {self.showError("备份保存失败：\(error)")} } } };case "accountModal":accountModal=body["open"] as? Bool ?? false;case "main":showMain();case "island":panel.orderFrontRegardless();case "hide":panel.orderOut(nil);case "resize":if let h=body["height"] as? Double{isExpanded=body["expanded"] as? Bool ?? (h>112);let screen=preferredScreen();let inset=notchGeometry(on:screen)?.height ?? 0;let height=isExpanded ? CGFloat(min(400,h))+inset : collapsedHeight(on:screen);layoutPanel(height:height,animate:true)};default:break}}
+ // A page reload resets JavaScript state, including the account dialog. Reset
+ // the native state at the same boundary instead of retaining its modal lock.
+ func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!){
+  guard webView === islandView else{return}
+  pointerTimer?.invalidate();pointerTimer=nil
+  accountModal=false;isExpanded=false;pointerEnteredAt=nil;pointerLeftAt=nil
+  if panel != nil{layoutPanel(height:collapsedHeight(on:preferredScreen()),animate:false)}
+ }
+ func webView(_ webView:WKWebView,didFinish navigation:WKNavigation!){
+  guard webView === islandView else{return}
+  setNotchMode(notchGeometry(on:preferredScreen()) != nil);startPointerTracking()
+ }
  func webView(_ webView:WKWebView,decidePolicyFor action:WKNavigationAction,decisionHandler:@escaping(WKNavigationActionPolicy)->Void){guard let u=action.request.url else{decisionHandler(.cancel);return};if u.host=="127.0.0.1"&&u.port==port{decisionHandler(.allow)}else if ["https","http"].contains(u.scheme ?? ""){NSWorkspace.shared.open(u);decisionHandler(.cancel)}else{decisionHandler(.cancel)}}
  func webView(_ webView:WKWebView,runOpenPanelWith parameters:WKOpenPanelParameters,initiatedByFrame frame:WKFrameInfo,completionHandler:@escaping([URL]?)->Void){let panel=NSOpenPanel();panel.allowsMultipleSelection=parameters.allowsMultipleSelection;panel.canChooseDirectories=false;panel.begin { result in completionHandler(result == .OK ? panel.urls : nil) }}
  func webView(_ webView:WKWebView,createWebViewWith configuration:WKWebViewConfiguration,for action:WKNavigationAction,windowFeatures:WKWindowFeatures)->WKWebView? { if let u=action.request.url,["https","http"].contains(u.scheme ?? "") {NSWorkspace.shared.open(u)};return nil }
- func applicationWillTerminate(_ notification:Notification){timer?.invalidate();if process?.isRunning==true{process?.terminate()}}
+ func applicationWillTerminate(_ notification:Notification){timer?.invalidate();pointerTimer?.invalidate();frameTimer?.invalidate();if process?.isRunning==true{process?.terminate()}}
 }
 let app=NSApplication.shared;let delegate=AppDelegate();app.delegate=delegate;app.setActivationPolicy(.accessory);app.run()

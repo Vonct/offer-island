@@ -1,1 +1,26 @@
-{"name":"offer-island","version":"0.3.0","private":true,"type":"module","scripts":{"start":"node server/http.mjs","mcp":"node server/mcp.mjs","test":"node --test tests/*.test.mjs","build:mac":"bash scripts/build-mac.sh"},"engines":{"node":">=24"},"dependencies":{"@modelcontextprotocol/sdk":"^1.26.0","zod":"^3.25.0"}}
+{
+  "name": "offer-island",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/http.mjs",
+    "mcp": "node server/mcp.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build:mac": "bash scripts/build-mac.sh",
+    "build:cloud": "esbuild node_modules/@supabase/supabase-js/dist/index.mjs --bundle --format=esm --platform=browser --minify --outfile=web/vendor/supabase.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@supabase/supabase-js": "2.116.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "esbuild": "0.28.2"
+  },
+  "license": "MIT"
+}

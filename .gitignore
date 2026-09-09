@@ -13,3 +13,6 @@ backups/
 
 .build/
 *.log
+
+# Local development history can contain personal account details
+note.md

@@ -42,6 +42,7 @@
     "id": "example-software",
     "company": "示例科技",
     "role": "软件工程师",
+    "jd": "负责嵌入式软件开发、调试与测试。",
     "status": "筛选中",
     "rawStatus": "简历初筛-进行中",
     "source": "用户提供截图，原文：简历初筛-进行中",

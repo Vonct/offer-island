@@ -9,7 +9,7 @@ export function normalize(kind,x){
  if(!x||typeof x!=='object'||Array.isArray(x))throw Error('记录必须是对象');
  const out={id:str(x.id,120)||id()};
  if(kind==='applications'){
-  for(const k of ['company','role','date','status','notes','next','link','source','rawStatus'])out[k]=str(x[k]??(k==='notes'?x.evidence:undefined));
+  for(const k of ['company','role','jd','date','status','notes','next','link','source','rawStatus'])out[k]=str(x[k]??(k==='notes'?x.evidence:undefined));
   if(!out.company||!out.role)throw Error('公司和职位必填');out.status||='待确认';
   if(!STATUSES.includes(out.status))throw Error('未知投递状态');
   if(out.link&&!/^https?:\/\//i.test(out.link))throw Error('链接须以 https:// 或 http:// 开头');
@@ -74,10 +74,10 @@ export function parseCSV(text){
  const rows=[];let row=[],field='',quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(field);field='';}else if(c==='\n'&&!quoted){row.push(field.replace(/\r$/,''));rows.push(row);row=[];field='';}else field+=c;}
  if(quoted)throw Error('CSV 引号未闭合');if(field||row.length){row.push(field.replace(/\r$/,''));rows.push(row);}const head=rows.shift()||[];
- const aliases={'公司':'company','职位':'role','状态':'status','备注':'notes','链接':'link','日期':'date','来源':'source','原始状态':'rawStatus'};
+ const aliases={'公司':'company','职位':'role','岗位JD':'jd','岗位 JD':'jd','JD':'jd','状态':'status','备注':'notes','链接':'link','日期':'date','来源':'source','原始状态':'rawStatus'};
  return {applications:rows.filter(r=>r.some(Boolean)).map(r=>Object.fromEntries(head.map((h,i)=>[aliases[h.trim()]||h.trim(),r[i]||''])))};
 }
-export function demoState(){const s=emptyState();s.applications=[{id:'demo-a',company:'橡果工作室',role:'前端开发工程师',status:'面试',date:'日期待确认',notes:'喜欢这里对产品细节的关注。',next:'准备项目讲解',link:'',source:'虚构示例',rawStatus:''},{id:'demo-b',company:'纸飞机科技',role:'AI 应用工程师',status:'筛选中',date:'日期待确认',notes:'已提交作品集，等待下一步。',next:'等待反馈',link:'',source:'虚构示例',rawStatus:''},{id:'demo-c',company:'小熊实验室',role:'软件工程师',status:'测评中',date:'日期待确认',notes:'留出安静的一小时。',next:'完成笔试',link:'',source:'虚构示例',rawStatus:''}];s.events=[{id:'demo-event',title:'橡果工作室 · 技术一面',type:'面试',date:dateKey(),time:'14:30',job:'demo-a',location:'线上会议',notes:'带上你最喜欢的那个项目。',source:'虚构示例',done:false}];s.experiences=[{id:'demo-note',title:'把项目讲成一个故事',job:'demo-a',date:dateKey(),round:'一面',questions:'遇到最棘手的问题是什么？',reflection:'先说问题和取舍，再解释实现。',notes:'下一次可以更从容一点。'}];return s;}
+export function demoState(){const s=emptyState();s.applications=[{id:'demo-a',company:'橡果工作室',role:'前端开发工程师',jd:'负责求职小岛的界面开发与体验打磨。\n\n希望你熟悉现代 JavaScript、CSS 与可访问性，并愿意把复杂流程做得温柔而清晰。',status:'面试',date:'日期待确认',notes:'喜欢这里对产品细节的关注。',next:'准备项目讲解',link:'',source:'虚构示例',rawStatus:''},{id:'demo-b',company:'纸飞机科技',role:'AI 应用工程师',jd:'参与 AI 工作流的原型设计、评测和产品化落地。',status:'筛选中',date:'日期待确认',notes:'已提交作品集，等待下一步。',next:'等待反馈',link:'',source:'虚构示例',rawStatus:''},{id:'demo-c',company:'小熊实验室',role:'软件工程师',jd:'',status:'测评中',date:'日期待确认',notes:'留出安静的一小时。',next:'完成笔试',link:'',source:'虚构示例',rawStatus:''}];s.events=[{id:'demo-event',title:'橡果工作室 · 技术一面',type:'面试',date:dateKey(),time:'14:30',job:'demo-a',location:'线上会议',notes:'带上你最喜欢的那个项目。',source:'虚构示例',done:false}];s.experiences=[{id:'demo-note',title:'把项目讲成一个故事',job:'demo-a',date:dateKey(),round:'一面',questions:'遇到最棘手的问题是什么？',reflection:'先说问题和取舍，再解释实现。',notes:'下一次可以更从容一点。'}];return s;}
 export function draftFromText(text){
  const source=str(text);const pick=pattern=>source.match(pattern)?.[1]?.trim()||'';
  const company=pick(/(?:公司|企业|Company)\s*[:：]\s*([^\n]+)/i);
