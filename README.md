@@ -111,3 +111,9 @@ scripts/     本机 macOS 构建
 右键菜单栏小岛图标 → 小岛显示器，选择内屏或外接屏，也可移到鼠标所在屏幕。选择会记住；断开显示器后回退到可用屏幕。
 
 App、本地网址与在线网址分别保存登录状态。本地页显示“本地保存 · 未登录云同步”时读取本机 SQLite；请在该页面登录同一邮箱后查看云端记录。右上角箭头按小岛登录状态打开本地或在线入口。
+
+## Windows 开发预览
+
+Windows 桌面外壳已加入：可拖动圆角悬浮窗、系统托盘、显示器选择、本地 SQLite 和可选云同步。安装 Node.js 24+ 后执行 `npm ci`、`npm ci --prefix desktop/windows`，再运行 `npm run start:windows`。在 Windows 上运行 `npm run build:windows` 可生成 x64 安装包；也可手动运行 GitHub Actions 的 Windows installer 工作流。
+
+此版本尚待 Windows 实机验收，当前 Release 的 DMG 仍仅用于 Mac。Windows 暂不提供图片 OCR；详见 [Windows 使用与构建说明](docs/WINDOWS.md)。

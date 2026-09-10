@@ -1,0 +1,6 @@
+{
+ "name":"offer-island-desktop","version":"0.3.2","private":true,"main":"main.cjs","description":"Offer Island Windows desktop companion","author":"milan","license":"MIT",
+ "scripts":{"start":"electron .","build":"electron-builder --win nsis --x64"},
+ "devDependencies":{"electron":"44.3.0","electron-builder":"26.15.3"},
+ "build":{"appId":"io.offer-island.windows","productName":"Offer Island","directories":{"output":"../../dist/windows"},"files":["main.cjs","preload.cjs","geometry.cjs","package.json"],"extraResources":[{"from":"../../web","to":"app/web"},{"from":"../../server","to":"app/server"},{"from":"../assets/OfferIslandIcon.png","to":"icon.png"},{"from":"../../LICENSE","to":"LICENSE"},{"from":"../../THIRD_PARTY_NOTICES.md","to":"THIRD_PARTY_NOTICES.md"}],"win":{"target":"nsis","artifactName":"Offer-Island-${version}-Windows-${arch}.${ext}"},"nsis":{"oneClick":false,"perMachine":false,"allowToChangeInstallationDirectory":true,"deleteAppDataOnUninstall":false}}
+}

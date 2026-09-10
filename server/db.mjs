@@ -1,7 +1,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {mkdirSync} from 'node:fs';import {dirname,join} from 'node:path';import {homedir} from 'node:os';
 import {emptyState,applyCommand} from '../web/core/model.mjs';
-export const defaultPath=()=>process.env.OFFER_DB||join(homedir(),'Library','Application Support','Offer Island','offer.sqlite');
+export const defaultPath=()=>process.env.OFFER_DB||(process.platform==='win32'?join(process.env.APPDATA||join(homedir(),'AppData','Roaming'),'Offer Island','offer.sqlite'):process.platform==='darwin'?join(homedir(),'Library','Application Support','Offer Island','offer.sqlite'):join(process.env.XDG_DATA_HOME||join(homedir(),'.local','share'),'offer-island','offer.sqlite'));
 export function openStore(path=defaultPath()){
  if(path!==':memory:')mkdirSync(dirname(path),{recursive:true,mode:0o700});const db=new DatabaseSync(path,{timeout:5000});db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)');db.prepare('INSERT OR IGNORE INTO state VALUES(1,?)').run(JSON.stringify(emptyState()));
  const read=()=>JSON.parse(db.prepare('SELECT data FROM state WHERE id=1').get().data);

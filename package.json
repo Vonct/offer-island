@@ -8,7 +8,9 @@
     "mcp": "node server/mcp.mjs",
     "test": "node --test tests/*.test.mjs",
     "build:mac": "bash scripts/build-mac.sh",
-    "build:cloud": "esbuild node_modules/@supabase/supabase-js/dist/index.mjs --bundle --format=esm --platform=browser --minify --outfile=web/vendor/supabase.mjs"
+    "build:cloud": "esbuild node_modules/@supabase/supabase-js/dist/index.mjs --bundle --format=esm --platform=browser --minify --outfile=web/vendor/supabase.mjs",
+    "start:windows": "npm --prefix desktop/windows start",
+    "build:windows": "npm --prefix desktop/windows run build"
   },
   "engines": {
     "node": ">=24"
