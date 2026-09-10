@@ -1,0 +1,47 @@
+name: Publish Windows preview
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Windows installer run ID
+        required: true
+      tag:
+        description: Preview release tag
+        required: true
+        default: v0.3.2-windows-preview.1
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.run_id }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate build and download installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-windows-preview\.[0-9]+$ ]]
+          gh run view "$BUILD_RUN" --json conclusion,headSha,name,event > build.json
+          jq -e '.conclusion == "success" and .name == "Windows installer" and .event == "workflow_dispatch"' build.json
+          echo "SOURCE_SHA=$(jq -r .headSha build.json)" >> "$GITHUB_ENV"
+          gh run download "$BUILD_RUN" --name Offer-Island-Windows-x64 --dir installer
+          cd installer
+          sha256sum *.exe > SHA256SUMS.txt
+      - name: Publish prerelease
+        shell: bash
+        run: |
+          cat > notes.md <<'NOTES'
+          Windows x64 开发预览：拖动悬浮窗、系统托盘、多显示器、本地 SQLite 与可选受邀云同步。
+
+          下载 exe 安装；收起后从右下角系统托盘恢复或退出。数据保存在 %APPDATA%\Offer Island\offer.sqlite。
+
+          已通过 Windows runner 的 15 项测试、NSIS 打包和打包运行时的静态页面/API/SQLite 写入重启检查。
+          尚待真实 Windows 电脑验收透明圆角、DPI 缩放、拖动、安装升级和云登录。此预览包没有 Windows 代码签名，暂不包含图片 OCR。macOS 请使用稳定版 DMG。
+          NOTES
+          gh release create "$RELEASE_TAG" installer/*.exe installer/SHA256SUMS.txt --target "$SOURCE_SHA" --prerelease --latest=false --title "Offer Island · Windows Preview 1" --notes-file notes.md
