@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 volume_name="Offer Island"
-output="dist/Offer-Island-0.3.1.dmg"
+output="dist/Offer-Island-0.3.2.dmg"
 background_source="desktop/assets/dmg-background.svg"
 background_png="dist/dmg-background.png"
 

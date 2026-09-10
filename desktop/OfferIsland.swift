@@ -8,7 +8,7 @@ class IslandPanel: NSPanel {
 class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
  var process: Process?; var panel: IslandPanel!; var status: NSStatusItem!; var statusMenu: NSMenu!; var islandView: WKWebView?; var timer: Timer?; var pointerTimer: Timer?; var pointerEnteredAt: Date?; var pointerLeftAt: Date?; var attempts=0; var isExpanded=false
  var frameTimer: Timer?
- var checkingUpdate=false; var accountModal=false
+ var checkingUpdate=false; var accountModal=false; var displayMenu:NSMenu!
  let port=18783
  var base:String { "http://127.0.0.1:\(port)" }
  func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,7 +21,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
   status=NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)
   if let icon=NSImage(contentsOf:resources.appendingPathComponent("OfferIslandIcon.icns")){icon.size=NSSize(width:18,height:18);status.button?.image=icon;status.button?.imagePosition = .imageOnly}else{status.button?.title="✳"}
   status.button?.toolTip="Offer Island：左键显示 / 隐藏，右键打开菜单";status.button?.target=self;status.button?.action=#selector(statusItemClicked(_:));status.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
-  statusMenu=NSMenu();statusMenu.addItem(withTitle:"打开在线工作台",action:#selector(showOnline),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"打开网页版",action:#selector(showMain),keyEquivalent:"o").target=self;statusMenu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;statusMenu.addItem(withTitle:"贴合刘海 / 屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"检查更新…",action:#selector(checkUpdates),keyEquivalent:"").target=self;statusMenu.addItem(.separator());statusMenu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self
+  statusMenu=NSMenu();statusMenu.addItem(withTitle:"打开在线工作台",action:#selector(showOnline),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"打开本地网页版",action:#selector(showMain),keyEquivalent:"o").target=self;statusMenu.addItem(withTitle:"显示 / 隐藏小岛",action:#selector(toggleIsland),keyEquivalent:"i").target=self;statusMenu.addItem(withTitle:"贴合刘海 / 屏幕顶部",action:#selector(resetPosition),keyEquivalent:"").target=self;statusMenu.addItem(withTitle:"检查更新…",action:#selector(checkUpdates),keyEquivalent:"").target=self;statusMenu.addItem(.separator());statusMenu.addItem(withTitle:"退出 Offer Island",action:#selector(quit),keyEquivalent:"q").target=self
+  let displays=NSMenuItem(title:"小岛显示器",action:nil,keyEquivalent:"");displayMenu=NSMenu();displays.submenu=displayMenu;statusMenu.insertItem(displays,at:3);rebuildDisplayMenu()
   NotificationCenter.default.addObserver(self,selector:#selector(screenConfigurationChanged(_:)),name:NSApplication.didChangeScreenParametersNotification,object:nil)
   timer=Timer.scheduledTimer(withTimeInterval:0.3,repeats:true){[weak self] _ in self?.waitForServer()}
  }
@@ -33,10 +34,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
  }
  @objc func showOnline(){NSWorkspace.shared.open(URL(string:"https://offer-island-milan.netlify.app/")!)}
  @objc func showMain(){NSWorkspace.shared.open(URL(string:base+"/")!)}
- @objc func statusItemClicked(_ sender:NSStatusBarButton){if NSApp.currentEvent?.type == .rightMouseUp{statusMenu.popUp(positioning:nil,at:NSPoint(x:sender.bounds.minX,y:sender.bounds.minY),in:sender)}else{toggleIsland()}}
+ @objc func statusItemClicked(_ sender:NSStatusBarButton){if NSApp.currentEvent?.type == .rightMouseUp{rebuildDisplayMenu();statusMenu.popUp(positioning:nil,at:NSPoint(x:sender.bounds.minX,y:sender.bounds.minY),in:sender)}else{toggleIsland()}}
  @objc func toggleIsland(){guard panel != nil else{return};if panel.isVisible{panel.orderOut(nil)}else{layoutPanel(height:panel.frame.height,animate:false);panel.orderFrontRegardless()}}
  func notchGeometry(on screen:NSScreen)->(width:CGFloat,height:CGFloat)?{guard let left=screen.auxiliaryTopLeftArea,let right=screen.auxiliaryTopRightArea else{return nil};let width=right.minX-left.maxX;let height=max(screen.safeAreaInsets.top,left.height,right.height);guard width>80,height>0 else{return nil};return(width,height)}
- func preferredScreen()->NSScreen{NSScreen.screens.first(where:{notchGeometry(on:$0) != nil}) ?? NSScreen.main ?? NSScreen.screens[0]}
+ func displayID(_ screen:NSScreen)->Int{(screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0}
+ func preferredScreen()->NSScreen{if let saved=UserDefaults.standard.object(forKey:"offerDisplayID") as? Int,let screen=NSScreen.screens.first(where:{displayID($0)==saved}){return screen};return NSScreen.screens.first(where:{notchGeometry(on:$0) != nil}) ?? NSScreen.main ?? NSScreen.screens[0]}
+ func rebuildDisplayMenu(){
+  guard displayMenu != nil else{return};displayMenu.removeAllItems()
+  for screen in NSScreen.screens{let item=displayMenu.addItem(withTitle:screen.localizedName,action:#selector(selectDisplay(_:)),keyEquivalent:"");item.target=self;item.tag=displayID(screen);item.state=displayID(preferredScreen())==item.tag ? .on : .off}
+  displayMenu.addItem(.separator());displayMenu.addItem(withTitle:"移到鼠标所在显示器",action:#selector(moveToPointerDisplay),keyEquivalent:"").target=self
+ }
+ func moveIsland(to screen:NSScreen){
+  let oldInset=notchGeometry(on:preferredScreen())?.height ?? 0
+  UserDefaults.standard.set(displayID(screen),forKey:"offerDisplayID")
+  pointerEnteredAt=nil;pointerLeftAt=nil
+  if panel != nil{let height=isExpanded ? panel.frame.height-oldInset+(notchGeometry(on:screen)?.height ?? 0) : collapsedHeight(on:screen);layoutPanel(height:height,animate:false);panel.orderFrontRegardless()};rebuildDisplayMenu()
+ }
+ @objc func selectDisplay(_ sender:NSMenuItem){if let screen=NSScreen.screens.first(where:{displayID($0)==sender.tag}){moveIsland(to:screen)}}
+ @objc func moveToPointerDisplay(){if let screen=NSScreen.screens.first(where:{$0.frame.contains(NSEvent.mouseLocation)}){moveIsland(to:screen)}}
  func collapsedHeight(on screen:NSScreen)->CGFloat{notchGeometry(on:screen).map{$0.height+18} ?? 72}
  // Pass the physical safe area to the page; the expanded header starts below it.
  func setNotchMode(_ enabled:Bool){
@@ -67,9 +82,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
  }
  func startPointerTracking(){guard pointerTimer == nil else{return};pointerTimer=Timer(timeInterval:1.0/60,target:self,selector:#selector(trackPointer),userInfo:nil,repeats:true);RunLoop.main.add(pointerTimer!,forMode:.common)}
  func requestExpanded(_ expanded:Bool){guard isExpanded != expanded else{return};isExpanded=expanded;pointerEnteredAt=nil;pointerLeftAt=nil;islandView?.evaluateJavaScript("window.offerIslandSetExpanded?.(\(expanded ? "true" : "false"))")}
- @objc func trackPointer(){if accountModal{pointerEnteredAt=nil;pointerLeftAt=nil;return};guard panel != nil,panel.isVisible,notchGeometry(on:preferredScreen()) != nil else{pointerEnteredAt=nil;pointerLeftAt=nil;return};let inside=panel.frame.insetBy(dx:-4,dy:-4).contains(NSEvent.mouseLocation);let now=Date();if inside{pointerLeftAt=nil;if !isExpanded{if let entered=pointerEnteredAt{if now.timeIntervalSince(entered)>=0.08{requestExpanded(true)}}else{pointerEnteredAt=now}}else{pointerEnteredAt=nil}}else{pointerEnteredAt=nil;if isExpanded{if let left=pointerLeftAt{if now.timeIntervalSince(left)>=0.28{requestExpanded(false)}}else{pointerLeftAt=now}}else{pointerLeftAt=nil}}}
+ @objc func trackPointer(){if accountModal{pointerEnteredAt=nil;pointerLeftAt=nil;return};guard panel != nil,panel.isVisible else{pointerEnteredAt=nil;pointerLeftAt=nil;return};let inside=panel.frame.insetBy(dx:-4,dy:-4).contains(NSEvent.mouseLocation);let now=Date();if inside{pointerLeftAt=nil;if !isExpanded{if let entered=pointerEnteredAt{if now.timeIntervalSince(entered)>=0.08{requestExpanded(true)}}else{pointerEnteredAt=now}}else{pointerEnteredAt=nil}}else{pointerEnteredAt=nil;if isExpanded{if let left=pointerLeftAt{if now.timeIntervalSince(left)>=0.28{requestExpanded(false)}}else{pointerLeftAt=now}}else{pointerLeftAt=nil}}}
  @objc func resetPosition(){guard panel != nil else{return};let screen=preferredScreen();layoutPanel(height:isExpanded ? panel.frame.height : collapsedHeight(on:screen),animate:true)}
- @objc func screenConfigurationChanged(_ notification:Notification){guard panel != nil else{return};let screen=preferredScreen();layoutPanel(height:isExpanded ? panel.frame.height : collapsedHeight(on:screen),animate:false)}
+ @objc func screenConfigurationChanged(_ notification:Notification){rebuildDisplayMenu();guard panel != nil else{return};let screen=preferredScreen();layoutPanel(height:isExpanded ? panel.frame.height : collapsedHeight(on:screen),animate:false)}
  @objc func checkUpdates(){
   guard !checkingUpdate else{return};checkingUpdate=true
   var request=URLRequest(url:URL(string:"https://api.github.com/repos/Vonct/offer-island/releases/latest")!);request.timeoutInterval=15;request.setValue("application/vnd.github+json",forHTTPHeaderField:"Accept")
@@ -90,7 +105,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNa
  }
  @objc func quit(){NSApp.terminate(nil)}
  func showError(_ message:String){let alert=NSAlert();alert.messageText="Offer Island";alert.informativeText=message;alert.runModal();NSApp.terminate(nil)}
- func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage){guard let url=message.frameInfo.request.url,url.host=="127.0.0.1",url.port==port,let body=message.body as? [String:Any],let action=body["action"] as? String else{return};switch action{case "backup":if let text=body["text"] as? String, text.utf8.count < 8000000 { let save=NSSavePanel();save.nameFieldStringValue="offer-island-backup.json";save.begin { response in if response == .OK, let url=save.url { do {try text.write(to:url,atomically:true,encoding:.utf8)} catch {self.showError("备份保存失败：\(error)")} } } };case "accountModal":accountModal=body["open"] as? Bool ?? false;case "main":showMain();case "island":panel.orderFrontRegardless();case "hide":panel.orderOut(nil);case "resize":if let h=body["height"] as? Double{isExpanded=body["expanded"] as? Bool ?? (h>112);let screen=preferredScreen();let inset=notchGeometry(on:screen)?.height ?? 0;let height=isExpanded ? CGFloat(min(400,h))+inset : collapsedHeight(on:screen);layoutPanel(height:height,animate:true)};default:break}}
+ func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage){guard let url=message.frameInfo.request.url,url.host=="127.0.0.1",url.port==port,let body=message.body as? [String:Any],let action=body["action"] as? String else{return};switch action{case "backup":if let text=body["text"] as? String, text.utf8.count < 8000000 { let save=NSSavePanel();save.nameFieldStringValue="offer-island-backup.json";save.begin { response in if response == .OK, let url=save.url { do {try text.write(to:url,atomically:true,encoding:.utf8)} catch {self.showError("备份保存失败：\(error)")} } } };case "accountModal":accountModal=body["open"] as? Bool ?? false;case "main":showMain();case "online":showOnline();case "island":panel.orderFrontRegardless();case "hide":panel.orderOut(nil);case "resize":if let h=body["height"] as? Double{isExpanded=body["expanded"] as? Bool ?? (h>112);let screen=preferredScreen();let inset=notchGeometry(on:screen)?.height ?? 0;let height=isExpanded ? CGFloat(min(400,h))+inset : collapsedHeight(on:screen);layoutPanel(height:height,animate:true)};default:break}}
  // A page reload resets JavaScript state, including the account dialog. Reset
  // the native state at the same boundary instead of retaining its modal lock.
  func webView(_ webView:WKWebView,didStartProvisionalNavigation navigation:WKNavigation!){

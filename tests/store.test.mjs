@@ -21,3 +21,8 @@ test('local snapshot reads only local records even with saved cloud session',asy
  data.set('offer-cloud-session-v1','saved-session');
  const snapshot=new Store();await snapshot.initLocal(false);assert.equal(snapshot.state.applications[0].company,'Preserved');assert.equal(snapshot.cloudUser,undefined);assert.equal(data.get('offer-cloud-session-v1'),'saved-session');
 });
+
+test('login in another tab refreshes a guest workspace but unrelated storage does not',async()=>{
+ const handlers=[];const data=new Map();let reloads=0;globalThis.window={};globalThis.location={search:'',hostname:'example.com',reload:()=>reloads++};globalThis.localStorage={getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)};globalThis.addEventListener=(event,fn)=>{if(event==='storage')handlers.push(fn)};
+ const store=new Store();await store.init();handlers.forEach(fn=>fn({key:'unrelated'}));assert.equal(reloads,0);handlers.forEach(fn=>fn({key:'offer-cloud-session-v1',newValue:'session'}));assert.equal(reloads,1);
+});

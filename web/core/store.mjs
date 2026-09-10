@@ -4,6 +4,7 @@ export class Store {
  constructor(){this.demo=new URLSearchParams(location.search).has('demo');this.key=window.OFFER_CONFIG?.storageKey||'offer-island-v3';this.state=emptyState();this.mode='浏览器本地';this.listeners=[];}
  async init(){
   if(this.demo){this.state=demoState();this.mode='示例 · 不保存';return;}
+  addEventListener('storage',e=>{if(e.key==='offer-cloud-session-v1')location.reload()});
   let cloud,session;
   if(localStorage.getItem('offer-cloud-session-v1')){
    cloud=await getCloud();
@@ -24,7 +25,7 @@ export class Store {
  async initLocal(watch=true){
   this.mode='本地 · 仅此浏览器';
   if(['localhost','127.0.0.1','[::1]'].includes(location.hostname)){
-   try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});if(r.ok){const d=await r.json();if(d.app==='offer-island'){this.remote=true;this.state=d.state;this.mode='桌面 · SQLite';}}}catch{}
+   try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});if(r.ok){const d=await r.json();if(d.app==='offer-island'){this.remote=true;this.state=d.state;this.mode='本地保存 · 未登录云同步';}}}catch{}
   }
   if(!this.remote){const raw=localStorage.getItem(this.key);if(raw){this.state=JSON.parse(raw);if(this.state.version!==3)throw Error('不支持此数据版本，请导出原数据后再迁移');normalizeImport(this.state);}else await this.migrate();
    if(watch)addEventListener('storage',e=>{if(e.key===this.key&&e.newValue){try{this.state=JSON.parse(e.newValue);this.emit();}catch{}}});

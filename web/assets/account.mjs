@@ -13,8 +13,11 @@ export async function mountAccount(store){
   const online=document.createElement('a');online.href=hostedWorkbench;online.target='_blank';online.rel='noopener';online.textContent='打开在线工作台 ↗';online.className='account-online';dialog.querySelector('.account-actions').append(online);
  }
 
+ if(['localhost','127.0.0.1','[::1]'].includes(location.hostname)){
+  const local=document.createElement('a');local.href='/';local.target='_blank';local.rel='noopener';local.className='account-online';local.textContent='打开本地网页版 ↗';local.onclick=e=>{if(window.webkit?.messageHandlers?.native){e.preventDefault();window.webkit.messageHandlers.native.postMessage({action:'main'})}};dialog.querySelector('.account-actions').append(local);
+ }
  const form=dialog.querySelector('form'),info=dialog.querySelector('.account-info'),message=dialog.querySelector('.account-message');
- info.textContent=store.cloudUser?`已登录 ${store.cloudUser.email}。在线修改保存到账号，另一端约 3 秒更新。`:'现在的数据仅保存在本机。登录后切换到账号工作区，可手动合并本地记录；原本地数据保留，退出云同步后可继续使用。';
+ info.textContent=store.cloudUser?`已登录 ${store.cloudUser.email}。当前界面保存到云端账号，另一端登录同一账号后约 3 秒更新。App、本地网页、在线网页需要分别登录。`:'当前页面尚未登录，显示的是本机数据。App 和在线网站的登录不会自动登录此页面；请使用同一邮箱登录，切换到账号工作区，可手动合并本地记录；原本地数据保留，退出云同步后可继续使用。';
  if(store.cloudUser){form.querySelectorAll('label,[data-signup],[type="submit"]').forEach(el=>el.hidden=true);form.querySelector('[data-signout]').hidden=false;}
  button.onclick=()=>{dialog.showModal();window.webkit?.messageHandlers?.native?.postMessage({action:'accountModal',open:true})};dialog.addEventListener('close',()=>window.webkit?.messageHandlers?.native?.postMessage({action:'accountModal',open:false}));form.querySelector('[data-close]').onclick=()=>dialog.close();
  if(store.cloudUser){
