@@ -7,6 +7,7 @@ const server=createServer(async(req,res)=>{const send=(code,data)=>{res.writeHea
  const url=new URL(req.url,`http://${host}`);if(url.pathname.startsWith('/api/')){
   if(req.headers['x-offer-client']!=='web'||(req.headers.origin&&req.headers.origin!==`http://${host}`))return send(403,{error:'Origin not allowed'});
   if(req.method==='GET'&&url.pathname==='/api/state')return send(200,{app:'offer-island',state:db.read()});
+  if(req.method==='GET'&&url.pathname==='/api/ocr-capabilities')return send(200,{native:existsSync(process.env.OFFER_OCR||join(root,'dist','offer-ocr'))});
   if(req.method==='POST'&&url.pathname==='/api/command'){const d=JSON.parse((await body(req)).toString());if(!Number.isInteger(d.expectedRevision))throw Error('缺少数据版本');return send(200,{state:db.dispatch(d.command,d.expectedRevision)})}
   if(req.method==='POST'&&url.pathname==='/api/ocr'){
    const exe=process.env.OFFER_OCR||join(root,'dist','offer-ocr');if(!existsSync(exe))return send(400,{error:'当前平台未提供图片 OCR。请粘贴文字，或使用 macOS 桌面版识别图片。'});

@@ -5739,3 +5739,8 @@ The externally maintained libraries used by Node.js are:
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
   """
+
+
+## Browser OCR
+
+Tesseract.js 7.0.0 and bundled Tesseract.js-core are Apache-2.0. English and Simplified Chinese trained data are Apache-2.0. Full notices are distributed at web/vendor/ocr/LICENSES.txt (also included in desktop resources).

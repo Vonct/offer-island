@@ -1,0 +1,12 @@
+import {mkdir,copyFile,readdir,readFile,writeFile} from 'node:fs/promises';
+const destination=new URL('../web/vendor/ocr/',import.meta.url);
+await mkdir(new URL('core/',destination),{recursive:true});
+await mkdir(new URL('lang/',destination),{recursive:true});
+const copy=(source,target)=>copyFile(new URL('../node_modules/'+source,import.meta.url),new URL(target,destination));
+await copy('tesseract.js/dist/tesseract.min.js','tesseract.min.js');
+await copy('tesseract.js/dist/worker.min.js','worker.min.js');
+for(const file of await readdir(new URL('../node_modules/tesseract.js-core/',import.meta.url)))if(file.endsWith('.wasm.js'))await copy('tesseract.js-core/'+file,'core/'+file);
+for(const lang of ['eng','chi_sim'])await copy(`@tesseract.js-data/${lang}/4.0.0_best_int/${lang}.traineddata.gz`,`lang/${lang}.traineddata.gz`);
+const notices=await Promise.all(['tesseract.js','tesseract.js-core'].map(async name=>`## ${name}\n\n${await readFile(new URL('../node_modules/'+name+(name==='tesseract.js'?'/LICENSE.md':'/LICENSE'),import.meta.url),'utf8')}`));
+await writeFile(new URL('LICENSES.txt',destination),notices.join('\n\n')+'\n\nEnglish and Simplified Chinese trained data: tesseract-ocr/tessdata_best, Apache-2.0. Distributed via @tesseract.js-data/eng and chi_sim 1.0.0.\n');
+console.log('Bundled OCR runtime and Chinese / English language data. Loaded only on recognition.');
