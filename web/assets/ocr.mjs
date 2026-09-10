@@ -18,13 +18,13 @@ export async function recognizeImage(file,{mode='local',signal,onProgress=()=>{}
   if(mode==='cloud'){
    const cloud=await getCloud(),{data:{session}}=await cloud.auth.getSession();
    if(!session)throw Error('请先登录，或切换为本机识别。');
-   onProgress('正在通过 DeepSeek 识别…');
+   onProgress('AI 正在识别并填写表单…');
    const response=await fetch(cloudConfig.url+'/functions/v1/offer-ocr',{
     method:'POST',headers:{Authorization:'Bearer '+session.access_token,apikey:cloudConfig.publishableKey,'Content-Type':file.type},body:file,signal:AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(65000)])
    });
    const result=await response.json().catch(()=>({}));
-   if(!response.ok)throw Error(result.error||'云端识别暂不可用，请切换为本机识别。');
-   return result.text;
+   if(!response.ok)throw Error(result.error||'AI 识别暂不可用，请切换为本机识别。');
+   return result;
   }
   // Native capability is independent of the current storage/login mode.
   if(['127.0.0.1','localhost'].includes(location.hostname)){
