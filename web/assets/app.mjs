@@ -1,3 +1,4 @@
+import {dismissOnBackdrop} from './dialog.mjs';
 import {parseRecognition} from '../core/recognition.mjs';
 import {mountImageImport} from './image-import.mjs';
 import {mountAccount} from './account.mjs';
@@ -50,16 +51,28 @@ function openJobDetail(jobId){
  dialog.querySelector('#edit-job-from-detail').onclick=()=>{dialog.close();editor('applications',job)};
  if(!dialog.open)dialog.showModal();
 }
-function openInbox(){inboxRevision=store.state.revision;inboxData=null;$('#inbox').innerHTML=`<form method="dialog"><button style="float:right" aria-label="关闭收件箱">×</button></form><p class="eyebrow">a place to sort things out</p><h2>导入收件箱</h2><p class="import-help">导入 JSON 备份、CSV 表格，或粘贴通知原文。先核对，再写入。也可以粘贴或上传截图识别文字。</p><section id="image-import"></section><label>导入备份或文字文件<input id="import-file" type="file" accept=".json,.csv,.txt"></label><textarea id="import-text" placeholder='粘贴 JSON、CSV，或招聘通知文字…'></textarea><div class="dialog-actions"><button id="text-draft">把原文整理为一条投递</button><button id="parse-import">预览结构化数据</button></div><p class="form-error" id="import-error" role="alert"></p><div id="import-preview"></div>`;
+function openInbox(){
+ if($('#import-text')){
+  if(inboxData&&inboxRevision!==store.state.revision){
+   const overwrite=$('#overwrite')?.checked;
+   renderImport();$('#overwrite').checked=!!overwrite;
+   $('#import-error').textContent='记录已更新，预览已刷新，请重新核对后导入。';
+  }
+  inboxRevision=store.state.revision;
+  if(!$('#inbox').open)$('#inbox').showModal();
+  return;
+ }
+ inboxRevision=store.state.revision;inboxData=null;$('#inbox').innerHTML=`<form method="dialog"><button style="float:right" aria-label="收起收件箱" title="收起并保留当前内容">×</button></form><p class="eyebrow">a place to sort things out</p><h2>导入收件箱</h2><p class="import-help">导入 JSON 备份、CSV 表格，或粘贴通知原文。先核对，再写入。也可以粘贴或上传截图识别文字。</p><p class="import-help">点击弹窗外部或按 Esc 可收起；本次页面内保留内容，识别会继续。再次点击“导入收件箱”即可回来。</p><section id="image-import"></section><label>导入备份或文字文件<input id="import-file" type="file" accept=".json,.csv,.txt"></label><textarea id="import-text" placeholder='粘贴 JSON、CSV，或招聘通知文字…'></textarea><div class="dialog-actions"><button id="text-draft">把原文整理为一条投递</button><button id="parse-import">预览结构化数据</button></div><p class="form-error" id="import-error" role="alert"></p><div id="import-preview"></div>`;
  $('#inbox').showModal();$('#text-draft').onclick=()=>editor('applications',draftFromText($('#import-text').value),value=>{try{inboxData=normalizeImport({applications:[value]});renderImport()}catch(e){$('#import-error').textContent=e.message}});
  $('#parse-import').onclick=()=>{try{const text=$('#import-text').value.trim();inboxData=normalizeImport(text.startsWith('{')||text.startsWith('[')?JSON.parse(text):parseCSV(text));renderImport()}catch(e){$('#import-error').textContent=e.message+'；普通原文请使用“整理为一条投递”。'}};
  const images=mountImageImport($('#inbox'),{signedIn:!!store.cloudUser,onDraft:result=>{const {application,warnings}=parseRecognition(result);const labels={company:'公司',role:'职位',jd:'岗位 JD',status:'状态',date:'日期',link:'链接',notes:'备注',next:'下一步',rawStatus:'原始状态'};const filled=Object.entries(labels).filter(([key])=>application[key]&&!(key==='status'&&application[key]==='待确认')).map(([,label])=>label);editor('applications',application,null,'AI 已填写：'+(filled.join('、')||'暂无明确字段')+'。请核对，修改后点击确认保存。'+(warnings.length?' 待确认：'+warnings.join('；'):''));},onText:text=>{const input=$('#import-text');input.value=[input.value.trim(),text.trim()].filter(Boolean).join('\n\n');}});
  $('#import-file').onchange=async e=>{try{const f=e.target.files[0];if(!f)return;if(f.size>8000000)throw Error('文件最大 8MB');if(f.type.startsWith('image/')){images.selectImage(f);return;}$('#import-text').value=await f.text();if(!f.name.endsWith('.txt'))$('#parse-import').click();}catch(e){$('#import-error').textContent=e.message}};
 }
-function renderImport(){const changes=previewImport(store.state,inboxData);$('#import-error').textContent='';$('#import-preview').innerHTML=`<h3>${changes.filter(c=>c.action==='add').length} 条新增 · ${changes.filter(c=>c.action==='update').length} 条更新 · ${changes.filter(c=>c.action==='duplicate').length} 条重复</h3>${changes.map((c,i)=>`<div class="import-row"><code>${{add:'新增',update:'更新',duplicate:'重复'}[c.action]}</code><div>${esc(c.record.company||c.record.title)}<p>${esc(c.record.role||c.record.date||'')}</p><p>${esc(c.record.status||c.record.type||'')}</p></div><button data-review="${i}">核对</button></div>`).join('')}<p><label><input type="checkbox" id="overwrite"> 允许覆盖已有记录的字段（未勾选只新增）</label></p><button id="commit-import">确认导入</button>`;
+function renderImport(){inboxRevision=store.state.revision;const changes=previewImport(store.state,inboxData);$('#import-error').textContent='';$('#import-preview').innerHTML=`<h3>${changes.filter(c=>c.action==='add').length} 条新增 · ${changes.filter(c=>c.action==='update').length} 条更新 · ${changes.filter(c=>c.action==='duplicate').length} 条重复</h3>${changes.map((c,i)=>`<div class="import-row"><code>${{add:'新增',update:'更新',duplicate:'重复'}[c.action]}</code><div>${esc(c.record.company||c.record.title)}<p>${esc(c.record.role||c.record.date||'')}</p><p>${esc(c.record.status||c.record.type||'')}</p></div><button data-review="${i}">核对</button></div>`).join('')}<p><label><input type="checkbox" id="overwrite"> 允许覆盖已有记录的字段（未勾选只新增）</label></p><button id="commit-import">确认导入</button>`;
  $('#import-preview').querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>{const c=changes[Number(b.dataset.review)],index=changes.slice(0,Number(b.dataset.review)).filter(x=>x.kind===c.kind).length;editor(c.kind,inboxData[c.kind][index],value=>{try{const copy=structuredClone(inboxData);copy[c.kind][index]=value;inboxData=normalizeImport(copy);renderImport()}catch(e){$('#import-error').textContent=e.message}})});
  $('#commit-import').onclick=async()=>{if(await act({type:'import',data:inboxData,overwrite:$('#overwrite').checked},inboxRevision))$('#inbox').close()};
 }
+for(const id of ['#inbox','#job-detail','#history-dialog'])dismissOnBackdrop($(id));
 $('#filter').innerHTML+=STATUSES.map(s=>`<option>${s}</option>`).join('');$('#search').oninput=e=>{query=e.target.value;render()};$('#filter').onchange=e=>{filter=e.target.value;render()};
 for(const id of ['#add-job','#add-job-2'])$(id).onclick=()=>editor('applications');$('#add-event').onclick=()=>editor('events');$('#import').onclick=openInbox;
 $('#backup').onclick=()=>{if(window.webkit?.messageHandlers?.native){window.webkit.messageHandlers.native.postMessage({action:'backup',text:JSON.stringify(exportState(store.state),null,2)});return;}const url=URL.createObjectURL(new Blob([JSON.stringify(exportState(store.state),null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=`offer-island-${dateKey()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
