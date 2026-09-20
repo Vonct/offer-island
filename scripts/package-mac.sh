@@ -3,7 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 volume_name="Offer Island"
-output="dist/Offer-Island-0.3.2.dmg"
+version=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")
+output="dist/Offer-Island-$version-$(uname -m).dmg"
 background_source="desktop/assets/dmg-background.svg"
 background_png="dist/dmg-background.png"
 

@@ -58,3 +58,7 @@
 
 可用状态：已投递、筛选中、测评中、面试、Offer、拒绝/已结束、待确认。
 不要将“测评已完成”推断为“笔试通过”，不要为“面试时间待定”创建虚构日程。
+
+## Offer 池
+
+`list_offers({query?})` 返回 Offer 和 revision；`upsert_offer({record, expectedRevision})` 新增或编辑 Offer。record 的公司与职位必填（更新已有记录时可仅传 id 和变更字段），可填写 job、location、status、currency、monthlySalary、salaryMonths、annualBonus、signOn、equity、benefits、salaryNotes、notes、receivedDate、deadline、startDate。未知薪资用 null，不推断日期或接受状态；使用稳定 id 支持幂等重试。Offer 同样支持 preview_import / commit_import 和 undo_last_change。

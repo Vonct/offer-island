@@ -15,3 +15,11 @@ export function parseRecognition(value){
  if(value.warnings!=null&&(!Array.isArray(value.warnings)||value.warnings.length>20||value.warnings.some(x=>typeof x!=='string'||x.length>500)))throw Error('AI 返回提示格式不正确');
  return {application,warnings:[...new Set([...warnings,...(value.warnings||[])])]};
 }
+
+// Keep legacy single-record responses readable during rolling deployments.
+export function parseRecognitions(value){
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('AI 返回的数据格式不正确');
+ if(!('applications' in value))return {applications:[parseRecognition(value)]};
+ if(!Array.isArray(value.applications)||!value.applications.length||value.applications.length>20)throw Error('AI 返回的职位数量不正确，请裁剪截图后重试');
+ return {applications:value.applications.map(parseRecognition)};
+}

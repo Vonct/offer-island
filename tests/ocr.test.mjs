@@ -7,9 +7,9 @@ const user='11111111-1111-4111-8111-111111111111';
 const structured={application:{company:'示例公司',role:'软件工程师',status:'面试',source:'示例公司 软件工程师 面试'},warnings:[]};
 const image=new Uint8Array([137,80,78,71,13,10,26,10,0]);
 const req=(body=image,headers={})=>new Request('https://example.com',{method:'POST',headers:{Authorization:'Bearer user-token',Origin:'http://localhost:8780',...headers},body});
-function fixture({auth=200,anonymous=false,quota=true,key='secret',modelStatus=200,finish='stop'}={}){
+function fixture({auth=200,anonymous=false,quota=true,key='secret',modelStatus=200,finish='stop',output=structured}={}){
  const calls=[];const env=k=>({SUPABASE_URL:'https://project.supabase.co',SUPABASE_ANON_KEY:'publishable',SUPABASE_SERVICE_ROLE_KEY:'server-only',DEEPSEEK_API_KEY:key}[k]);
- const handler=createHandler({env,fetcher:async(url,options)=>{calls.push({url,options});if(url.endsWith('/user'))return Response.json({id:user,is_anonymous:anonymous,email_confirmed_at:'2026-01-01'},{status:auth});if(url.includes('/rpc/'))return Response.json(quota);return Response.json({choices:[{finish_reason:finish,message:{content:JSON.stringify(structured)}}]},{status:modelStatus});}});
+ const handler=createHandler({env,fetcher:async(url,options)=>{calls.push({url,options});if(url.endsWith('/user'))return Response.json({id:user,is_anonymous:anonymous,email_confirmed_at:'2026-01-01'},{status:auth});if(url.includes('/rpc/'))return Response.json(quota);return Response.json({choices:[{finish_reason:finish,message:{content:JSON.stringify(output)}}]},{status:modelStatus});}});
  return {handler,calls};
 }
 test('cloud OCR validates login, image and quota before any model call',async()=>{
@@ -39,11 +39,29 @@ test('OCR quota is service-only, atomic, per-account and resets by UTC date',asy
  }finally{await db.close();}
 });
 
-import {parseRecognition} from '../web/core/recognition.mjs';
+import {parseRecognition,parseRecognitions} from '../web/core/recognition.mjs';
 test('AI draft strips injected identity, validates fields, and keeps missing facts editable',async()=>{
  const draft=parseRecognition({application:{id:'existing-record',user_id:'other-account',company:'示例',role:'研发',status:'随便编',date:'2026-02-30',link:'javascript:alert(1)'},warnings:['轮次待确认']});
  assert.equal(draft.application.id,undefined);assert.equal(draft.application.user_id,undefined);assert.equal(draft.application.status,'待确认');assert.equal(draft.application.date,'');assert.equal(draft.application.link,'');assert.ok(draft.warnings.includes('轮次待确认'));
  assert.ok(parseRecognition({application:{}}).warnings.includes('请补充公司'));
  assert.throws(()=>parseRecognition({application:{company:[]}}));assert.throws(()=>parseRecognition({application:{},warnings:'bad'}));
  assert.equal(await readFile(new URL('../web/core/recognition.mjs',import.meta.url),'utf8'),await readFile(new URL('../supabase/functions/offer-ocr/recognition.mjs',import.meta.url),'utf8'));
+});
+
+test('multi-role OCR preserves each job and its own evidence without merging company names',async()=>{
+ const output={applications:[
+  {application:{company:'示例机器人',role:'嵌入式研发',status:'筛选中',date:'2026-09-15',notes:'第一志愿',source:'研发岗位 筛选中'},warnings:[]},
+  {application:{company:'示例机器人',role:'智能应用研发',status:'已投递',date:'2026-09-14',notes:'第二志愿',source:'应用岗位 已投递',id:'injected'},warnings:['城市待确认']}
+ ]};
+ const {handler,calls}=fixture({output});const response=await handler(req());assert.equal(response.status,200);
+ const result=await response.json();const parsed=parseRecognitions(result);
+ assert.equal(parsed.applications.length,2);assert.equal(result.application,undefined);
+ assert.deepEqual(parsed.applications.map(x=>[x.application.role,x.application.status,x.application.date]),[['嵌入式研发','筛选中','2026-09-15'],['智能应用研发','已投递','2026-09-14']]);
+ assert.equal(parsed.applications[1].application.id,undefined);assert.deepEqual(parsed.applications[1].warnings,['城市待确认']);
+ assert.equal(calls.filter(c=>c.url.includes('deepseek')).length,1);
+ assert.equal(parseRecognitions(structured).applications.length,1);
+ for(const applications of [[],{},Array(21).fill(structured),[structured,{application:{role:123}}]]){
+  assert.throws(()=>parseRecognitions({applications}));
+  assert.equal((await fixture({output:{applications}}).handler(req())).status,502);
+ }
 });

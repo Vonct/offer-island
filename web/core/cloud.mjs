@@ -1,5 +1,5 @@
 import {cloudConfig} from './cloud-config.mjs';
-import {emptyState,applyCommand,normalizeImport} from './model.mjs';
+import {emptyState,applyCommand,normalizeImport,hydrateState} from './model.mjs';
 let client;
 export async function getCloud(){
  if(client)return client;
@@ -17,13 +17,14 @@ export async function readCloud(userId){
  const {data,error}=await cloud.from('offer_workspaces').select('data').eq('user_id',userId).maybeSingle();
  if(error)throw cloudError(error);
  if(!data)return emptyState();
- normalizeImport(data.data);return data.data;
+ normalizeImport(data.data);return hydrateState(data.data);
 }
 export async function saveCloud(state,command,expected){
  if(state.revision!==expected)throw Error('数据已更新，请重新打开编辑。');
  const next=applyCommand(state,command);
+ if(next.revision===expected)return next;
  const cloud=await getCloud();
  const {data,error}=await cloud.rpc('offer_save_workspace',{expected_revision:expected,next_data:next});
  if(error)throw cloudError(error);
- return data;
+ return hydrateState(data);
 }

@@ -1,5 +1,6 @@
 import {getCloud,readCloud,saveCloud} from './cloud.mjs';
-import {emptyState,applyCommand,demoState,normalize,normalizeImport} from './model.mjs';
+import {startActivityTracking} from './activity.mjs';
+import {emptyState,applyCommand,demoState,normalize,normalizeImport,hydrateState} from './model.mjs';
 export class Store {
  constructor(){this.demo=new URLSearchParams(location.search).has('demo');this.key=window.OFFER_CONFIG?.storageKey||'offer-island-v3';this.state=emptyState();this.mode='浏览器本地';this.listeners=[];}
  async init(){
@@ -14,6 +15,7 @@ export class Store {
   }
   if(session){
    this.cloudUser=session.user;this.mode='云端 · 在线同步';
+   startActivityTracking(cloud);
    try{this.state=await readCloud(this.cloudUser.id)}catch(error){this.cloudFailed=true;this.mode=error.message;}
    cloud.auth.onAuthStateChange((event,current)=>{if(event==='SIGNED_OUT'||(current&&current.user.id!==this.cloudUser.id))location.reload()});
    let polling=false;
@@ -25,11 +27,11 @@ export class Store {
  async initLocal(watch=true){
   this.mode='本地 · 仅此浏览器';
   if(['localhost','127.0.0.1','[::1]'].includes(location.hostname)){
-   try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});if(r.ok){const d=await r.json();if(d.app==='offer-island'){this.remote=true;this.state=d.state;this.mode='本地保存 · 未登录云同步';}}}catch{}
+   try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});if(r.ok){const d=await r.json();if(d.app==='offer-island'){this.remote=true;this.state=hydrateState(d.state);this.mode='本地保存 · 未登录云同步';}}}catch{}
   }
-  if(!this.remote){const raw=localStorage.getItem(this.key);if(raw){this.state=JSON.parse(raw);if(this.state.version!==3)throw Error('不支持此数据版本，请导出原数据后再迁移');normalizeImport(this.state);}else await this.migrate();
-   if(watch)addEventListener('storage',e=>{if(e.key===this.key&&e.newValue){try{this.state=JSON.parse(e.newValue);this.emit();}catch{}}});
-  }else if(watch)setInterval(async()=>{try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});const d=await r.json();if(d.state.revision!==this.state.revision){this.state=d.state;this.emit();}}catch{}},3000);
+  if(!this.remote){const raw=localStorage.getItem(this.key);if(raw){this.state=hydrateState(JSON.parse(raw));if(this.state.version!==3)throw Error('不支持此数据版本，请导出原数据后再迁移');normalizeImport(this.state);}else await this.migrate();
+   if(watch)addEventListener('storage',e=>{if(e.key===this.key&&e.newValue){try{this.state=hydrateState(JSON.parse(e.newValue));this.emit();}catch{}}});
+  }else if(watch)setInterval(async()=>{try{const r=await fetch('/api/state',{headers:{'X-Offer-Client':'web'}});const d=await r.json();if(d.state.revision!==this.state.revision){this.state=hydrateState(d.state);this.emit();}}catch{}},3000);
  }
  async migrate(){
   const cfg=window.OFFER_CONFIG||{},appKeys=cfg.legacyApps||['offer-island-applications-v1','offer-applications-v1','job-island-applications-v1'],eventKeys=cfg.legacyEvents||['offer-island-calendar-v1','offer-calendar-v1','job-island-calendar-v1'];
@@ -47,8 +49,8 @@ export class Store {
    try{this.state=await saveCloud(this.state,command,expected)}catch(error){if(error.message.includes('OFFER_CONFLICT')){this.state=await readCloud(this.cloudUser.id);this.emit();throw Error('另一端已更新，请重新打开编辑，避免覆盖。')}throw error;}
    this.emit();return this.state;
   }
-  if(this.remote){const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','X-Offer-Client':'web'},body:JSON.stringify({command,expectedRevision:expected})});const d=await r.json();if(!r.ok){if(d.state){this.state=d.state;this.emit();}throw Error(d.error||'保存失败');}this.state=d.state;}
-  else {const work=()=>{if(!this.demo){const latest=JSON.parse(localStorage.getItem(this.key)||'null');if(latest&&latest.revision!==expected){this.state=latest;this.emit();throw Error('另一窗口已更新数据。请重新打开编辑，避免覆盖。');}}const next=applyCommand(this.state,command);if(!this.demo)localStorage.setItem(this.key,JSON.stringify(next));this.state=next;};if(navigator.locks)await navigator.locks.request(this.key,work);else work();}
+  if(this.remote){const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','X-Offer-Client':'web'},body:JSON.stringify({command,expectedRevision:expected})});const d=await r.json();if(!r.ok){if(d.state){this.state=hydrateState(d.state);this.emit();}throw Error(d.error||'保存失败');}this.state=hydrateState(d.state);}
+  else {const work=()=>{if(!this.demo){const latest=JSON.parse(localStorage.getItem(this.key)||'null');if(latest&&latest.revision!==expected){this.state=hydrateState(latest);this.emit();throw Error('另一窗口已更新数据。请重新打开编辑，避免覆盖。');}}const next=applyCommand(this.state,command);if(!this.demo)localStorage.setItem(this.key,JSON.stringify(next));this.state=next;};if(navigator.locks)await navigator.locks.request(this.key,work);else work();}
   this.emit();return this.state;
  }
 }

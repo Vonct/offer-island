@@ -7,7 +7,7 @@ export async function mountAccount(store){
  const slot=document.getElementById('account-slot');if(!slot)return;
  const button=document.createElement('button');button.type='button';button.textContent=store.cloudUser?'账号 · 已登录':'启用云同步';slot.append(button);
  const dialog=document.createElement('dialog');dialog.className='account-dialog';
- dialog.innerHTML=`<form><h2>账号与云同步</h2><p class="account-info"></p><label>邮箱<input name="email" type="email" autocomplete="email" required></label><label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required></label><label data-invite>邀请码（仅注册需要）<input name="invite" autocomplete="off" maxlength="128"></label><p class="account-message" role="status"></p><div class="account-actions"><button type="button" data-close>关闭</button><button type="button" data-signup>注册</button><button type="submit">登录</button><button type="button" data-signout hidden>退出云同步，使用本地数据</button></div></form>`;
+ dialog.innerHTML=`<form><h2>账号与云同步</h2><p class="account-info"></p><label>邮箱<input name="email" type="email" autocomplete="email" required></label><label>密码<input name="password" type="password" autocomplete="current-password" minlength="8" required></label><p class="signup-note">开放注册，无需邀请码。登录后会记录每日云端活跃及保存次数，用于汇总运营统计。</p><p class="account-message" role="status"></p><div class="account-actions"><button type="button" data-close>关闭</button><button type="button" data-signup>注册</button><button type="submit">登录</button><button type="button" data-signout hidden>退出云同步，使用本地数据</button></div></form>`;
  document.body.append(dialog);
  if(store.cloudUser&&['localhost','127.0.0.1','[::1]'].includes(location.hostname)){
   const online=document.createElement('a');online.href=hostedWorkbench;online.target='_blank';online.rel='noopener';online.textContent='打开在线工作台 ↗';online.className='account-online';dialog.querySelector('.account-actions').append(online);
@@ -18,7 +18,7 @@ export async function mountAccount(store){
  }
  const form=dialog.querySelector('form'),info=dialog.querySelector('.account-info'),message=dialog.querySelector('.account-message');
  info.textContent=store.cloudUser?`已登录 ${store.cloudUser.email}。当前界面保存到云端账号，另一端登录同一账号后约 3 秒更新。App、本地网页、在线网页需要分别登录。`:'当前页面尚未登录，显示的是本机数据。App 和在线网站的登录不会自动登录此页面；请使用同一邮箱登录，切换到账号工作区，可手动合并本地记录；原本地数据保留，退出云同步后可继续使用。';
- if(store.cloudUser){form.querySelectorAll('label,[data-signup],[type="submit"]').forEach(el=>el.hidden=true);form.querySelector('[data-signout]').hidden=false;}
+ if(store.cloudUser){form.querySelectorAll('label,.signup-note,[data-signup],[type="submit"]').forEach(el=>el.hidden=true);form.querySelector('[data-signout]').hidden=false;}
  button.onclick=()=>{dialog.showModal();window.webkit?.messageHandlers?.native?.postMessage({action:'accountModal',open:true})};dialog.addEventListener('close',()=>window.webkit?.messageHandlers?.native?.postMessage({action:'accountModal',open:false}));form.querySelector('[data-close]').onclick=()=>dialog.close();
  if(store.cloudUser){
   const migration=document.createElement('section');migration.className='account-migration';
@@ -33,7 +33,10 @@ export async function mountAccount(store){
    commit.disabled=true;pending=null;
    try{const file=e.target.files[0];if(!file)return;if(file.size>8000000)throw Error('备份最大 8 MB');pending=normalizeImport(JSON.parse(await file.text()));revision=store.state.revision;const changes=previewImport(store.state,pending);summary.textContent=`${changes.filter(c=>c.action==='add').length} 条新增，${changes.filter(c=>c.action==='update').length} 条差异，${changes.filter(c=>c.action==='duplicate').length} 条重复。仅新增，保留账号已有记录。`;commit.disabled=store.cloudFailed===true;}catch(e){summary.textContent=e.message}
   };
-  commit.onclick=async()=>{if(!pending)return;commit.disabled=true;try{await store.dispatch({type:'import',data:pending,overwrite:false},revision);summary.textContent=`迁移完成：账号现有 ${store.state.applications.length} 份投递、${store.state.events.length} 项日程、${store.state.experiences.length} 篇面经。`;pending=null;}catch(e){summary.textContent=e.message+'；请重新选择文件核对。'}};
+  commit.onclick=async()=>{if(!pending)return;commit.disabled=true;try{await store.dispatch({type:'import',data:pending,overwrite:false},revision);summary.textContent=`迁移完成：账号现有 ${store.state.applications.length} 份投递、${store.state.events.length} 项日程、${store.state.experiences.length} 篇面经、${store.state.offers?.length||0} 份 Offer。`;pending=null;}catch(e){summary.textContent=e.message+'；请重新选择文件核对。'}};
+ }
+ if(store.cloudUser){
+  getCloud().then(cloud=>cloud.rpc('offer_is_admin')).then(({data,error})=>{if(error||data!==true)return;const link=document.createElement('a');link.href='/admin.html';link.textContent='运营看板 ↗';link.className='account-online';slot.append(link);}).catch(()=>{});
  }
  const footer=document.createElement('div');footer.className='account-footer';footer.append(form.querySelector('[data-close]'));form.append(footer);
  let outsideStart=false;
@@ -43,15 +46,14 @@ export async function mountAccount(store){
  let busy=false;
  async function run(signup){
   if(busy||!form.reportValidity())return;
-  if(signup&&!form.elements.invite.value.trim()){message.textContent='注册需要邀请码，请向邀请你的人索取。';return;}
   busy=true;message.textContent='正在连接…';
   const email=form.elements.email.value.trim(),password=form.elements.password.value;
   try{
    const cloud=await getCloud();
-   const {data,error}=signup?await cloud.auth.signUp({email,password,options:{data:{invite_code:form.elements.invite.value.trim()}}}):await cloud.auth.signInWithPassword({email,password});
+   const {data,error}=signup?await cloud.auth.signUp({email,password}):await cloud.auth.signInWithPassword({email,password});
    if(error)throw error;
    if(data.session){dialog.close();location.reload();}else message.textContent='请查收验证邮件，验证完成后回到这里登录。';
-  }catch(e){message.textContent=/Database error saving new user|invite/i.test(e.message)?'邀请码无效、已使用或已过期，请核对后重试。':e.message}finally{busy=false;form.elements.password.value='';}
+  }catch(e){message.textContent=/Database error saving new user/i.test(e.message)?'注册暂时不可用，请稍后重试。':e.message}finally{busy=false;form.elements.password.value='';}
  }
  form.onsubmit=e=>{e.preventDefault();run(false)};form.querySelector('[data-signup]').onclick=()=>run(true);
  form.querySelector('[data-signout]').onclick=async()=>{const cloud=await getCloud();const {error}=await cloud.auth.signOut({scope:'local'});if(error){message.textContent=error.message;return;}location.reload()};

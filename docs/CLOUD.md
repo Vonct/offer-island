@@ -30,5 +30,26 @@
 
 本地 SQL 测试不能替代 Supabase 生产项目验证；仍需完成真实邮箱注册、确认、两端读写、冲突与退出账号验证。管理插件不可用时，将 `setup.sql` 手动运行于 SQL Editor。
 
-## 邀请注册
-新注册必须携带 options.data.invite_code；supabase/invitations.sql 在 auth.users 插入前校验私有表中的 SHA-256 哈希并扣减次数。既有账号登录不需要邀请码，本地使用不需要账号。邀请码默认一次有效、90天到期，管理员可在私有表将 remaining 设为0撤销。不要将邀请码明文提交仓库或发布到网页。
+## 开放注册与管理员看板
+
+邮箱注册无需邀请码。已有部署执行 `supabase/migrations/20260917055129_public_signup_analytics.sql`：移除邀请触发器，保留既有账号、工作区和历史邀请记录，建立私有的管理员名单与每日使用汇总。不要再次执行历史 `invitations.sql`，否则会重新开启邀请限制。
+
+在 Supabase Auth 中保持 Allow new users to sign up 开启。邮箱确认与发信能力由项目 Auth 配置决定。
+
+管理员使用现有登录账号。在 SQL Editor 中执行以下语句（替换成自己已注册的邮箱；查不到账号时不会授予权限）：
+
+```sql
+insert into offer_private.admins(user_id)
+select id from auth.users where lower(email)=lower('YOUR_ADMIN_EMAIL')
+on conflict do nothing;
+```
+
+管理员登录后工作台账号区域出现「运营看板」，也可直接打开 `/admin.html`。其他账号与匿名访问无法读取聚合数据；授权不使用可自行修改的 user_metadata。撤销权限删除对应 admins 行即可立即生效。
+
+看板提供 7 / 30 / 90 天注册与活跃趋势、累计注册、已验证邮箱、已有内容的工作区、云端投递 / 日程 / 面经数量、按天的成功保存统计及 CSV 导出。注册人数统计当前仍存在的账号，删除账号会同步移除其使用记录；不展示个人邮箱或求职内容。
+
+日期使用 Asia/Shanghai。活跃是当天已登录并在可见页面打开工作台，或成功保存云端工作区的去重账号；多端去重，后台同步轮询和看板浏览不计入。新版页面每个可见账号每日最多一次成功心跳，失败下次重试；旧客户端由成功保存触发活跃。未登录本地模式和示例模式不上报。
+
+活跃和保存次数从 analytics_config.started_at 开始采集，启用日可能不完整。更早日期标为「未采集」，CSV 留空；不能据现有 last_sign_in_at 反推历史日活。当前内容数量会随删除而减少，已有内容指至少保留一条投递、日程或面经。
+
+统计写入无求职内容；数据库触发器仅记录成功保存次数，事务失败不计。管理员只收到汇总。RLS 继续隔离每个用户的工作区；analytics 私有表不直接向普通账号开放。
